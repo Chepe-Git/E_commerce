@@ -29,4 +29,8 @@ export interface BasketTotals {
     shipping: number;
     subtotal: number;
     total: number;
+    discount: number;
+    discountPercentage: number;
+    discountAmount: number;
+    discountedSubtotal: number;
 }
