@@ -125,8 +125,17 @@ export class BasketService {
     const basket = this.getCurrentBasketValue();
     if (!basket) return;
     const subtotal = basket.items.reduce((a, b) => (b.price * b.quantity) + a, 0);
-    const total = subtotal + basket.shippingPrice;
-    this.basketTotalSource.next({shipping: basket.shippingPrice, total, subtotal});
+    const shipping = basket.shippingPrice;
+    // US-0009 AC-1: apply 5% automatic discount only when subtotal is greater than $500.
+    const discountPercentage = subtotal > 500 ? 5 : 0;
+    const discount = discountPercentage > 0 ? this.roundMoney(subtotal * (discountPercentage / 100)) : 0;
+    // US-0009 AC-4: checkout total is subtotal minus discount plus shipping, rounded to two decimals.
+    const total = this.roundMoney(subtotal - discount + shipping);
+    this.basketTotalSource.next({shipping, total, subtotal, discount, discountPercentage});
+  }
+
+  private roundMoney(amount: number): number {
+    return Math.round((amount + Number.EPSILON) * 100) / 100;
   }
 
   private isProduct(item: Product | BasketItem): item is Product {

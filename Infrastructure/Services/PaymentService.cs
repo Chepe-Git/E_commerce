@@ -32,17 +32,49 @@ namespace Infrastructure.Services
             if (basket.DeliveryMethodId.HasValue)
             {
                 var deliveryMethod = await _unitOfWork.Repository<DeliveryMethod>().GetByIdAsync((int)basket.DeliveryMethodId);
+
+                // US-0010 AC-3: If the selected delivery method no longer exists, stop the charge and ask the customer to review the summary.
+                if (deliveryMethod == null) return null;
+
                 shippingPrice = deliveryMethod.Price;
             }
+
+            var basketChanged = false;
 
             foreach (var item in basket.Items)
             {
                 var productItem = await _unitOfWork.Repository<Product>().GetByIdAsync(item.Id);
+
+                // US-0010 AC-3: If a product no longer exists, prevent payment because the current basket total cannot be trusted.
+                if (productItem == null) return null;
+
                 if (item.Price != productItem.Price)
                 {
                     item.Price = productItem.Price;
+                    basketChanged = true;
                 }
             }
+
+            basket.ShippingPrice = shippingPrice;
+
+            if (basketChanged)
+            {
+                await _basketRepository.UpdateBasketAsync(basket);
+
+                // US-0010 AC-3: Product prices changed since the checkout summary was shown, so require a review before charging.
+                return null;
+            }
+
+            // US-0010 AC-1: Recalculate the payable total from the authoritative basket values used by checkout.
+            var subtotal = basket.Items.Sum(item => item.Price * item.Quantity);
+            var discount = subtotal > 500m ? Math.Round(subtotal * 0.05m, 2, MidpointRounding.AwayFromZero) : 0m;
+            var totalFinal = subtotal - discount + shippingPrice;
+
+            // US-0010 AC-4: Prevent payment if the final total is inconsistent before sending any amount to Stripe.
+            if (totalFinal < 0) return null;
+
+            // US-0010 AC-2: Stripe receives the final total including the automatic discount and shipping, expressed in cents.
+            var amount = (long)Math.Round(totalFinal * 100, MidpointRounding.AwayFromZero);
 
             // Stripe service
 
@@ -54,7 +86,7 @@ namespace Infrastructure.Services
             {
                 var options = new PaymentIntentCreateOptions
                 {
-                    Amount = (long)basket.Items.Sum(i => i.Quantity * (i.Price * 100)) + (long)shippingPrice * 100,
+                    Amount = amount,
                     Currency = "usd",
                     PaymentMethodTypes = new List<string> { "card" }
                 };
@@ -66,7 +98,7 @@ namespace Infrastructure.Services
             {
                 var options = new PaymentIntentUpdateOptions
                 {
-                    Amount = (long)basket.Items.Sum(i => i.Quantity * (i.Price * 100)) + (long)shippingPrice * 100
+                    Amount = amount
                 };
                 await service.UpdateAsync(basket.PaymentIntentId, options);
             }
