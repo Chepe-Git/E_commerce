@@ -9,6 +9,11 @@
             <strong class="text-muted">Order subtotal</strong>
             <strong>{{totals.subtotal | currency}}</strong>
         </li>
+        <!-- US-0009 AC-3: displays automatic discount before checkout total -->
+        <li class="d-flex justify-content-between py-3 border-bottom" *ngIf="totals.discount > 0">
+            <strong class="text-muted">Automatic discount ({{totals.discountPercentage}}%)</strong>
+            <strong>-{{totals.discount | currency}}</strong>
+        </li>
         <li class="d-flex justify-content-between py-3 border-bottom">
             <strong class="text-muted">Shipping and handling</strong>
             <strong>{{totals.shipping | currency}}</strong>

@@ -26,7 +26,8 @@ namespace API.Controllers
         {
             var basket = await _paymentService.CreateOrUpdatePaymentIntent(basketId);
 
-            if (basket == null) return BadRequest(new ApiResponse(400, "Problem with your basket"));
+            // US-0010 AC-3/AC-4: Prevent payment when the payable amount cannot be reconciled with the current basket total.
+            if (basket == null) return BadRequest(new ApiResponse(400, "The payment total does not match the current basket. Please review your order summary."));
 
             return basket;
         }
